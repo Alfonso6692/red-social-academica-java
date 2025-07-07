@@ -5,6 +5,10 @@
     <c:redirect url="login.jsp"/>
 </c:if>
 
+<a href="${pageContext.request.contextPath}/MensajeServlet?idOtroUsuario=${usuarioPerfil.id}" class="btn btn-secondary">
+    <i class="bi bi-chat-dots-fill me-1"></i> Enviar Mensaje
+</a>
+
 <%-- Variable para el menú --%>
 <c:set var="paginaActual" value="perfil" scope="request" />
 
