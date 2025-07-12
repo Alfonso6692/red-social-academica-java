@@ -109,6 +109,44 @@ public class UsuarioDAO {
         return usuario;
     }
 
+    /**
+     * Busca usuarios cuyo nombre o apellido coincidan con el término de búsqueda.
+     * La búsqueda no es sensible a mayúsculas/minúsculas en PostgreSQL (ILIKE).
+     * @param query El nombre o apellido a buscar.
+     * @return Una lista de objetos Usuario que coinciden con la búsqueda.
+     */
+    public List<Usuario> buscarPorNombre(String query) {
+        String sql = "SELECT * FROM usuarios WHERE nombre ILIKE ? OR apellido ILIKE ?";
+        List<Usuario> usuariosEncontrados = new ArrayList<>();
+
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            // Se añaden los '%' para buscar cualquier coincidencia, no solo exactas.
+            // Por ejemplo, buscar "alf" encontrará a "Alfonso".
+            pstmt.setString(1, "%" + query + "%");
+            pstmt.setString(2, "%" + query + "%");
+
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                Usuario usuario = new Usuario(
+                        rs.getString("id"),
+                        rs.getString("nombre"),
+                        rs.getString("apellido"),
+                        rs.getString("correo"),
+                        rs.getString("contrasena"),
+                        rs.getString("carrera"),
+                        rs.getInt("ciclo")
+                );
+                usuariosEncontrados.add(usuario);
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Error al buscar usuarios por nombre: " + e.getMessage());
+        }
+        return usuariosEncontrados;
+    }
 
     /**
      * Actualiza los datos de un usuario existente en la base de datos.
