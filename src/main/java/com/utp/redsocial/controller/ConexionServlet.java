@@ -2,135 +2,69 @@ package com.utp.redsocial.controller;
 
 import com.utp.redsocial.entidades.Usuario;
 import com.utp.redsocial.services.ServicioConexiones;
-import com.utp.redsocial.services.ServicioUsuarios;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.List;
 
 /**
- * Servlet para manejar todas las acciones relacionadas con las Conexiones entre usuarios.
- * Utiliza un parámetro "accion" para determinar la operación a realizar
- * (solicitar, aceptar, listar, etc.).
+ * Este servlet maneja todas las acciones relacionadas con las conexiones de un usuario,
+ * como listar, solicitar o eliminar amistades.
  */
-@WebServlet(name = "ConexionServlet", urlPatterns = {"/ConexionServlet"})
+// La anotación @WebServlet debe coincidir exactamente con la URL que se usa en el navegador.
+@WebServlet("/ConexionServlet")
 public class ConexionServlet extends HttpServlet {
 
-    // Se instancian los servicios necesarios.
-    private final ServicioUsuarios servicioUsuarios = new ServicioUsuarios();
-    private final ServicioConexiones servicioConexiones = new ServicioConexiones(servicioUsuarios);
+    private ServicioConexiones servicioConexiones;
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-
-        String accion = request.getParameter("accion");
-        if (accion == null) {
-            accion = "listar"; // Acción por defecto
-        }
-
-        switch (accion) {
-            case "listar":
-                listarConexiones(request, response);
-                break;
-            case "aceptar":
-                aceptarConexion(request, response);
-                break;
-            // Otros casos para GET
-            default:
-                listarConexiones(request, response);
-        }
+    public void init() throws ServletException {
+        // Obtenemos la instancia del servicio que fue creada por el Listener al iniciar la aplicación.
+        // Es crucial que el Listener se ejecute primero.
+        this.servicioConexiones = (ServicioConexiones) getServletContext().getAttribute("servicioConexiones");
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         String accion = request.getParameter("accion");
-        if (accion == null) {
-            response.sendRedirect("conexiones.jsp");
-            return;
-        }
 
-        switch (accion) {
-            case "solicitar":
-                solicitarConexion(request, response);
-                break;
-            // Otros casos para POST
-            default:
-                response.sendRedirect("conexiones.jsp");
+        if ("listar".equals(accion)) {
+            listarConexiones(request, response);
+        } else {
+            // Si la acción no es "listar", se responde con un error.
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Acción no válida o no especificada.");
         }
     }
 
-    private void listarConexiones(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-
-        HttpSession session = request.getSession(false);
-        if (session == null || session.getAttribute("usuarioLogueado") == null) {
-            response.sendRedirect("login.jsp");
-            return;
+    private void listarConexiones(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        // Verificación de seguridad: si el servicio no se inicializó, no podemos continuar.
+        if (servicioConexiones == null) {
+            throw new ServletException("El servicio de conexiones no está disponible. Revisa los logs del servidor para errores de inicialización.");
         }
 
-        Usuario usuario = (Usuario) session.getAttribute("usuarioLogueado");
-        List<Usuario> conexiones = servicioConexiones.obtenerConexiones(usuario.getId());
+        // Obtenemos el objeto Usuario de la sesión, que debió ser guardado durante el login.
+        Usuario usuarioLogueado = (Usuario) request.getSession().getAttribute("usuario");
 
-        request.setAttribute("listaConexiones", conexiones);
-        request.getRequestDispatcher("conexiones.jsp").forward(request, response);
-    }
+        if (usuarioLogueado != null) {
+            System.out.println("Servlet: Buscando conexiones para el usuario: " + usuarioLogueado.getNombre());
 
-    private void solicitarConexion(HttpServletRequest request, HttpServletResponse response)
-            throws IOException {
+            // Usamos el servicio para obtener la lista de amigos.
+            List<Usuario> conexiones = servicioConexiones.obtenerConexiones(usuarioLogueado.getId());
 
-        HttpSession session = request.getSession(false);
-        if (session == null || session.getAttribute("usuarioLogueado") == null) {
-            response.sendRedirect("login.jsp");
-            return;
+            System.out.println("Servlet: Se encontraron " + conexiones.size() + " conexiones.");
+
+            // Guardamos la lista en el 'request' para que la página JSP pueda acceder a ella.
+            request.setAttribute("listaDeConexiones", conexiones);
+        } else {
+            System.err.println("Error en ConexionServlet: No se encontró un usuario en la sesión. El usuario debe iniciar sesión primero.");
         }
 
-        try {
-            String idDestinatario = request.getParameter("idDestinatario");
-            Usuario solicitante = (Usuario) session.getAttribute("usuarioLogueado");
-
-            servicioConexiones.solicitarConexion(solicitante.getId(), idDestinatario);
-
-            // Redirigir de vuelta al perfil del usuario al que se le envió la solicitud
-            response.sendRedirect("perfil.jsp?id=" + idDestinatario + "&exito=Solicitud enviada");
-
-        } catch (IllegalArgumentException e) {
-            String idDestinatario = request.getParameter("idDestinatario");
-            response.sendRedirect("perfil.jsp?id=" + idDestinatario + "&error=" + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            response.sendRedirect("dashboard.jsp?error=Ocurrió un error inesperado");
-        }
-    }
-
-    private void aceptarConexion(HttpServletRequest request, HttpServletResponse response)
-            throws IOException {
-
-        HttpSession session = request.getSession(false);
-        if (session == null || session.getAttribute("usuarioLogueado") == null) {
-            response.sendRedirect("login.jsp");
-            return;
-        }
-
-        try {
-            String idSolicitante = request.getParameter("idSolicitante");
-            Usuario destinatario = (Usuario) session.getAttribute("usuarioLogueado");
-
-            servicioConexiones.aceptarConexion(idSolicitante, destinatario.getId());
-
-            // Redirigir a la página de notificaciones o conexiones
-            response.sendRedirect("notificaciones.jsp?exito=Conexión aceptada");
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            response.sendRedirect("notificaciones.jsp?error=Error al aceptar la conexión");
-        }
+        // Redirigimos la petición (junto con los datos del request) a la página JSP.
+        // Asegúrate de que la ruta a tu archivo JSP sea correcta.
+        request.getRequestDispatcher("/vistas/conexiones/listar.jsp").forward(request, response);
     }
 }

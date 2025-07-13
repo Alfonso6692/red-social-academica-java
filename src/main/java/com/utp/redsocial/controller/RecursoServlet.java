@@ -3,8 +3,6 @@ package com.utp.redsocial.controller;
 import com.utp.redsocial.entidades.Recurso;
 import com.utp.redsocial.entidades.Usuario;
 import com.utp.redsocial.services.ServicioRecursos;
-import com.utp.redsocial.services.ServicioUsuarios;
-
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -15,18 +13,27 @@ import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.ArrayList;
 
 /**
- * Servlet para manejar todas las acciones relacionadas con los Recursos Educativos.
- * Utiliza un parámetro "accion" para determinar la operación a realizar
- * (subir, listar, buscar, etc.).
+ * Servlet para manejar todas las acciones relacionadas con los recursos,
+ * como listar o compartir nuevos recursos.
  */
 @WebServlet(name = "RecursoServlet", urlPatterns = {"/RecursoServlet"})
 public class RecursoServlet extends HttpServlet {
 
-    // Se instancian los servicios necesarios.
-    private final ServicioUsuarios servicioUsuarios = new ServicioUsuarios();
-    private final ServicioRecursos servicioRecursos = new ServicioRecursos(servicioUsuarios);
+    // Declarar la variable del servicio, pero NO inicializarla aquí
+    private ServicioRecursos servicioRecursos;
+
+    @Override
+    public void init() throws ServletException {
+        // Obtener la instancia del servicio desde el contexto de la aplicación
+        this.servicioRecursos = (ServicioRecursos) getServletContext().getAttribute("servicioRecursos");
+
+        if (servicioRecursos == null) {
+            throw new ServletException("ServicioRecursos no está disponible en el contexto de la aplicación");
+        }
+    }
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
@@ -34,7 +41,7 @@ public class RecursoServlet extends HttpServlet {
 
         String accion = request.getParameter("accion");
         if (accion == null) {
-            accion = "listar"; // Acción por defecto
+            accion = "listar"; // Acción por defecto si no se especifica ninguna.
         }
 
         switch (accion) {
@@ -44,9 +51,8 @@ public class RecursoServlet extends HttpServlet {
             case "buscar":
                 buscarRecursos(request, response);
                 break;
-            // Otros casos para GET, como ver un recurso específico
             default:
-                listarRecursos(request, response);
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Acción no válida.");
         }
     }
 
@@ -55,74 +61,116 @@ public class RecursoServlet extends HttpServlet {
             throws ServletException, IOException {
 
         String accion = request.getParameter("accion");
-        if (accion == null) {
-            response.sendRedirect("recursos.jsp"); // Redirigir a la página principal de recursos
-            return;
-        }
 
-        switch (accion) {
-            case "subir":
-                subirRecurso(request, response);
-                break;
-            // Otros casos para POST
-            default:
-                response.sendRedirect("recursos.jsp");
+        if ("compartir".equals(accion)) {
+            compartirRecurso(request, response);
+        } else {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Acción no válida.");
         }
     }
 
+    /**
+     * Obtiene la lista de todos los recursos y la envía a la página JSP para mostrarla.
+     */
     private void listarRecursos(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        List<Recurso> listaRecursos = servicioRecursos.listarTodos();
-        request.setAttribute("listaRecursos", listaRecursos);
-        request.getRequestDispatcher("recursos.jsp").forward(request, response);
+        try {
+            List<Recurso> listaDeRecursos = servicioRecursos.listarTodos();
+            request.setAttribute("listaDeRecursos", listaDeRecursos);
+
+            // Enviar a la página JSP
+            request.getRequestDispatcher("/vistas/recursos/listar.jsp").forward(request, response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            request.setAttribute("error", "Error al cargar los recursos");
+            request.getRequestDispatcher("/vistas/recursos/listar.jsp").forward(request, response);
+        }
     }
 
+    /**
+     * Busca recursos por etiqueta
+     */
     private void buscarRecursos(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        String etiqueta = request.getParameter("etiqueta");
-        List<Recurso> recursosEncontrados = servicioRecursos.buscarPorEtiqueta(etiqueta);
+        try {
+            String etiqueta = request.getParameter("etiqueta");
+            List<Recurso> recursos;
 
-        request.setAttribute("listaRecursos", recursosEncontrados);
-        request.setAttribute("busquedaActual", etiqueta); // Para mostrar qué se buscó
-        request.getRequestDispatcher("recursos.jsp").forward(request, response);
+            if (etiqueta != null && !etiqueta.trim().isEmpty()) {
+                recursos = servicioRecursos.buscarPorEtiqueta(etiqueta.trim());
+                request.setAttribute("etiquetaBuscada", etiqueta);
+            } else {
+                recursos = servicioRecursos.listarTodos();
+            }
+
+            request.setAttribute("listaDeRecursos", recursos);
+            request.getRequestDispatcher("/vistas/recursos/listar.jsp").forward(request, response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            request.setAttribute("error", "Error en la búsqueda");
+            request.getRequestDispatcher("/vistas/recursos/listar.jsp").forward(request, response);
+        }
     }
 
-    private void subirRecurso(HttpServletRequest request, HttpServletResponse response)
+    /**
+     * Procesa el formulario para compartir un nuevo recurso.
+     */
+    private void compartirRecurso(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
 
-        HttpSession session = request.getSession(false);
-        if (session == null || session.getAttribute("usuarioLogueado") == null) {
-            response.sendRedirect("login.jsp");
-            return;
-        }
-
         try {
-            // 1. Obtener los datos del formulario de subir recurso
+            // 1. Obtener los datos del formulario
             String titulo = request.getParameter("titulo");
             String descripcion = request.getParameter("descripcion");
             String url = request.getParameter("url");
             String tipo = request.getParameter("tipo");
+            String etiquetasStr = request.getParameter("etiquetas");
 
-            String etiquetasInput = request.getParameter("etiquetas");
-            List<String> etiquetas = Arrays.asList(etiquetasInput.split("\\s*,\\s*"));
+            // 2. Validaciones básicas
+            if (titulo == null || titulo.trim().isEmpty()) {
+                response.sendRedirect("RecursoServlet?accion=listar&error=Título es requerido");
+                return;
+            }
 
-            // 2. Obtener el ID del usuario que sube el recurso
-            Usuario usuario = (Usuario) session.getAttribute("usuarioLogueado");
-            String idUsuarioSube = usuario.getId();
+            if (url == null || url.trim().isEmpty()) {
+                response.sendRedirect("RecursoServlet?accion=listar&error=URL es requerida");
+                return;
+            }
 
-            // 3. Llamar al servicio para crear el recurso
-            servicioRecursos.subirRecurso(titulo, descripcion, url, tipo, etiquetas, idUsuarioSube);
+            // 3. Procesar etiquetas
+            List<String> etiquetas = new ArrayList<>();
+            if (etiquetasStr != null && !etiquetasStr.trim().isEmpty()) {
+                etiquetas = Arrays.asList(etiquetasStr.split(","));
+                // Limpiar espacios en blanco
+                etiquetas.replaceAll(String::trim);
+                etiquetas.removeIf(String::isEmpty);
+            }
 
-            // 4. Redirigir a la lista de recursos con un mensaje de éxito
-            response.sendRedirect("RecursoServlet?accion=listar&exito=Recurso subido correctamente");
+            // 4. Obtener el usuario de la sesión
+            HttpSession session = request.getSession(false);
+            Usuario usuarioLogueado = (Usuario) session.getAttribute("usuario");
+
+            if (usuarioLogueado == null) {
+                response.sendRedirect("login.jsp");
+                return;
+            }
+
+            // 5. Llamar al servicio
+            servicioRecursos.subirRecurso(titulo, descripcion, url, tipo, etiquetas, usuarioLogueado.getId());
+
+            // 6. Redirigir con éxito
+            response.sendRedirect("RecursoServlet?accion=listar&exito=true");
 
         } catch (IllegalArgumentException e) {
-            response.sendRedirect("subir_recurso.jsp?error=" + e.getMessage());
+            String errorMsg = java.net.URLEncoder.encode(e.getMessage(), "UTF-8");
+            response.sendRedirect("RecursoServlet?accion=listar&error=" + errorMsg);
         } catch (Exception e) {
             e.printStackTrace();
-            response.sendRedirect("subir_recurso.jsp?error=Ocurrió un error inesperado");
+            response.sendRedirect("RecursoServlet?accion=listar&error=Error interno del servidor");
         }
     }
 }

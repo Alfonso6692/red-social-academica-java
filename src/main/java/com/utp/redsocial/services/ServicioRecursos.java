@@ -23,13 +23,12 @@ public class ServicioRecursos {
     private final RecursoDAO recursoDAO;
     private final ServicioUsuarios servicioUsuarios; // Para validar al usuario que sube el recurso
 
+    // Asegúrate de que esté así:
     public ServicioRecursos(ServicioUsuarios servicioUsuarios) {
         this.listaDeRecursos = new ArrayListPersonalizado<>();
         this.indicePorEtiqueta = new HashMap<>();
-        this.recursoDAO = new RecursoDAO();
+        this.recursoDAO = new RecursoDAO();  // ✅ Con 'new'
         this.servicioUsuarios = servicioUsuarios;
-        // Opcional: Cargar recursos existentes desde la BD al iniciar
-        // cargarRecursosEnMemoria();
     }
 
     /**

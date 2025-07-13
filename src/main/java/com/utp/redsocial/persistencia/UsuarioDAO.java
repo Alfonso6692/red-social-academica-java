@@ -150,9 +150,11 @@ public class UsuarioDAO {
 
     /**
      * Actualiza los datos de un usuario existente en la base de datos.
+     *
      * @param usuario El objeto Usuario con los datos actualizados.
+     * @return
      */
-    public void actualizar(Usuario usuario) {
+    public boolean actualizar(Usuario usuario) {
         String sql = "UPDATE usuarios SET nombre = ?, apellido = ?, correo = ?, contrasena = ?, carrera = ?, ciclo = ? WHERE id = ?";
 
         try (Connection conn = ConexionBD.getConexion();
@@ -172,6 +174,7 @@ public class UsuarioDAO {
         } catch (SQLException e) {
             System.err.println("Error al actualizar el usuario: " + e.getMessage());
         }
+        return false;
     }
 
     /**

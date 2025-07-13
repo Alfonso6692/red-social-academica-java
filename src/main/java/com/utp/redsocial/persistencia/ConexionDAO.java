@@ -94,4 +94,40 @@ public class ConexionDAO {
             System.err.println("Error al eliminar la conexión: " + e.getMessage());
         }
     }
+
+    public List<Usuario> obtenerAmigosDe(String idUsuario) {
+        List<Usuario> amigos = new ArrayList<>();
+        String sql = "SELECT u.* FROM usuarios u " +
+                "JOIN amistades a ON u.id = a.usuario_b_id WHERE a.usuario_a_id = ? " +
+                "UNION " +
+                "SELECT u.* FROM usuarios u " +
+                "JOIN amistades a ON u.id = a.usuario_a_id WHERE a.usuario_b_id = ?";
+
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, idUsuario);
+            pstmt.setString(2, idUsuario);
+
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                Usuario amigo = new Usuario(
+                        rs.getString("id"),
+                        rs.getString("nombre"),
+                        rs.getString("apellido"),
+                        rs.getString("correo"),
+                        rs.getString("contrasena"),
+                        rs.getString("carrera"),
+                        rs.getInt("ciclo")
+                );
+                amigos.add(amigo);
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Error al obtener amigos: " + e.getMessage());
+            e.printStackTrace(); // Imprime el error completo para más detalles
+        }
+        return amigos;
+    }
 }

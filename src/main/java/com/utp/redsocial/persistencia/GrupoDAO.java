@@ -1,6 +1,7 @@
 package com.utp.redsocial.persistencia;
 
 import com.utp.redsocial.conexion.ConexionBD;
+import com.utp.redsocial.entidades.Categoria; // Importamos la entidad Categoria
 import com.utp.redsocial.entidades.Grupo;
 
 import java.sql.Connection;
@@ -14,7 +15,7 @@ import java.util.List;
 /**
  * DAO para la entidad Grupo.
  * Contiene todos los métodos para las operaciones CRUD de los grupos
- * en la base de datos.
+ * y también maneja la creación de categorías.
  */
 public class GrupoDAO {
 
@@ -160,5 +161,32 @@ public class GrupoDAO {
             System.err.println("Error al listar los grupos: " + e.getMessage());
         }
         return grupos;
+    }
+
+    // =================================================================
+    // MÉTODO AÑADIDO PARA MANEJAR CATEGORÍAS
+    // =================================================================
+    /**
+     * Guarda una nueva categoría en la base de datos.
+     * @param categoria El objeto Categoria a guardar.
+     */
+    public void guardarCategoria(Categoria categoria) {
+        String sql = "INSERT INTO categorias (id, nombre, descripcion, categoria_padre_id) VALUES (?, ?, ?, ?)";
+
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, categoria.getId());
+            pstmt.setString(2, categoria.getNombre());
+            pstmt.setString(3, categoria.getDescripcion());
+            pstmt.setString(4, categoria.getCategoriaPadreId());
+
+            pstmt.executeUpdate();
+            System.out.println("Categoría guardada con éxito desde GrupoDAO.");
+
+        } catch (SQLException e) {
+            System.err.println("Error al guardar la categoría: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
