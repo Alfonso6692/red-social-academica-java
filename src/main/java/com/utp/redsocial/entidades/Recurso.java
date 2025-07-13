@@ -24,6 +24,10 @@ public class Recurso {
         this.etiquetas = etiquetas;
     }
 
+    public Recurso() {
+
+    }
+
     // Getters y Setters
 
     public String getId() {

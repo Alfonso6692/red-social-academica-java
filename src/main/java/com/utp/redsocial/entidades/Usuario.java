@@ -1,61 +1,43 @@
 package com.utp.redsocial.entidades;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
+/**
+ * Entidad Usuario que coincide con la tabla 'usuarios' en Supabase
+ * Campos: id, nombre, apellido, correo, contrasena, carrera, ciclo
+ */
 public class Usuario {
-
     private String id;
     private String nombre;
     private String apellido;
     private String correo;
     private String contrasena;
     private String carrera;
-    private int ciclo;
-    private List<String> habilidades;
-    private List<String> intereses;
-    private boolean enLinea;
+    private String ciclo;
+    private boolean enLinea; // Campo para estado de conexión
 
-    /**
-     * Constructor completo.
-     * Útil para crear un nuevo usuario con todos sus detalles desde el inicio.
-     */
-    public Usuario(String id, String nombre, String apellido, String correo, String contrasena, String carrera, int ciclo, List<String> habilidades, List<String> intereses, boolean enLinea) {
+    // Constructor vacío
+    public Usuario() {
+        this.enLinea = false; // Por defecto, el usuario no está en línea
+    }
+
+    // Constructor con parámetros básicos
+    public Usuario(String id, String nombre, String apellido, String correo, String contrasena) {
+        this();
         this.id = id;
         this.nombre = nombre;
         this.apellido = apellido;
         this.correo = correo;
         this.contrasena = contrasena;
-        this.carrera = carrera;
-        this.ciclo = ciclo;
-        this.habilidades = habilidades;
-        this.intereses = intereses;
-        this.enLinea = enLinea;
     }
 
-    /**
-     * Constructor para el DAO.
-     * Este es el constructor que la clase UsuarioDAO utiliza para crear objetos Usuario
-     * a partir de los datos recuperados de la base de datos.
-     */
-    public Usuario(String id, String nombre, String apellido, String correo, String contrasena, String carrera, int ciclo) {
-        this.id = id;
-        this.nombre = nombre;
-        this.apellido = apellido;
-        this.correo = correo;
-        this.contrasena = contrasena;
+    // Constructor completo
+    public Usuario(String id, String nombre, String apellido, String correo,
+                   String contrasena, String carrera, String ciclo) {
+        this(id, nombre, apellido, correo, contrasena);
         this.carrera = carrera;
         this.ciclo = ciclo;
-        // Inicializamos los campos restantes con valores por defecto.
-        this.habilidades = new ArrayList<>();
-        this.intereses = new ArrayList<>();
-        this.enLinea = false;
     }
 
-
-    // --- Getters y Setters ---
-
+    // Getters y Setters
     public String getId() {
         return id;
     }
@@ -104,28 +86,12 @@ public class Usuario {
         this.carrera = carrera;
     }
 
-    public int getCiclo() {
+    public String getCiclo() {
         return ciclo;
     }
 
-    public void setCiclo(int ciclo) {
+    public void setCiclo(String ciclo) {
         this.ciclo = ciclo;
-    }
-
-    public List<String> getHabilidades() {
-        return habilidades;
-    }
-
-    public void setHabilidades(List<String> habilidades) {
-        this.habilidades = habilidades;
-    }
-
-    public List<String> getIntereses() {
-        return intereses;
-    }
-
-    public void setIntereses(List<String> intereses) {
-        this.intereses = intereses;
     }
 
     public boolean isEnLinea() {
@@ -136,16 +102,91 @@ public class Usuario {
         this.enLinea = enLinea;
     }
 
+    // Métodos de utilidad
+    /**
+     * Obtiene el nombre completo del usuario
+     */
+    public String getNombreCompleto() {
+        StringBuilder nombreCompleto = new StringBuilder();
+
+        if (nombre != null && !nombre.trim().isEmpty()) {
+            nombreCompleto.append(nombre.trim());
+        }
+
+        if (apellido != null && !apellido.trim().isEmpty()) {
+            if (nombreCompleto.length() > 0) {
+                nombreCompleto.append(" ");
+            }
+            nombreCompleto.append(apellido.trim());
+        }
+
+        return nombreCompleto.length() > 0 ? nombreCompleto.toString() : correo;
+    }
+
+    /**
+     * Obtiene información académica completa
+     */
+    public String getInfoAcademica() {
+        StringBuilder info = new StringBuilder();
+
+        if (carrera != null && !carrera.trim().isEmpty()) {
+            info.append(carrera);
+        }
+
+        if (ciclo != null && !ciclo.trim().isEmpty()) {
+            if (info.length() > 0) {
+                info.append(" - ");
+            }
+            info.append("Ciclo ").append(ciclo);
+        }
+
+        return info.length() > 0 ? info.toString() : "Información académica no especificada";
+    }
+
+    /**
+     * Marca al usuario como conectado/en línea
+     */
+    public void conectar() {
+        this.enLinea = true;
+    }
+
+    /**
+     * Marca al usuario como desconectado/fuera de línea
+     */
+    public void desconectar() {
+        this.enLinea = false;
+    }
+
+    /**
+     * Obtiene el estado de conexión como texto
+     */
+    public String getEstadoConexion() {
+        return enLinea ? "En línea" : "Desconectado";
+    }
+
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Usuario usuario = (Usuario) o;
-        return Objects.equals(id, usuario.id);
+    public String toString() {
+        return "Usuario{" +
+                "id='" + id + '\'' +
+                ", nombre='" + nombre + '\'' +
+                ", apellido='" + apellido + '\'' +
+                ", correo='" + correo + '\'' +
+                ", carrera='" + carrera + '\'' +
+                ", ciclo='" + ciclo + '\'' +
+                ", enLinea=" + enLinea +
+                '}';
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        Usuario usuario = (Usuario) obj;
+        return id != null ? id.equals(usuario.id) : usuario.id == null;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id);
+        return id != null ? id.hashCode() : 0;
     }
 }

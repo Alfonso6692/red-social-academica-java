@@ -1,14 +1,14 @@
 package com.utp.redsocial.controller;
 
+import com.utp.redsocial.conexion.ConexionBD;
 import com.utp.redsocial.services.ServicioUsuarios;
 import com.utp.redsocial.services.ServicioRecursos;
-import com.utp.redsocial.services.ServicioGrupos;
 import com.utp.redsocial.services.ServicioMensajeria;
-import com.utp.redsocial.services.ServicioNotificaciones;
 
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 import javax.servlet.annotation.WebListener;
+import java.sql.Connection;
 
 /**
  * Listener que se ejecuta al iniciar y destruir la aplicación web.
@@ -23,6 +23,14 @@ public class InicializadorAplicacion implements ServletContextListener {
         System.out.println("=== INICIANDO APLICACIÓN RED SOCIAL ACADÉMICA ===");
 
         try {
+            // 0. Probar conexión a la base de datos
+            Connection testConnection = ConexionBD.getConexion();
+            if (testConnection != null) {
+                System.out.println("✅ Conexión a Supabase establecida exitosamente");
+            } else {
+                throw new RuntimeException("No se pudo establecer conexión a la base de datos");
+            }
+
             // 1. Inicializar ServicioUsuarios (es independiente)
             ServicioUsuarios servicioUsuarios = new ServicioUsuarios();
             sce.getServletContext().setAttribute("servicioUsuarios", servicioUsuarios);
@@ -33,15 +41,16 @@ public class InicializadorAplicacion implements ServletContextListener {
             sce.getServletContext().setAttribute("servicioRecursos", servicioRecursos);
             System.out.println("✓ ServicioRecursos inicializado correctamente");
 
-            // 3. Inicializar otros servicios (añadir según vayas creándolos)
+            // 3. Inicializar ServicioMensajeria
+            ServicioMensajeria servicioMensajeria = new ServicioMensajeria(servicioUsuarios);
+            sce.getServletContext().setAttribute("servicioMensajeria", servicioMensajeria);
+            System.out.println("✓ ServicioMensajeria inicializado correctamente");
+
+            // 4. Inicializar otros servicios cuando los crees
             /*
             ServicioGrupos servicioGrupos = new ServicioGrupos(servicioUsuarios);
             sce.getServletContext().setAttribute("servicioGrupos", servicioGrupos);
             System.out.println("✓ ServicioGrupos inicializado correctamente");
-
-            ServicioMensajeria servicioMensajeria = new ServicioMensajeria(servicioUsuarios);
-            sce.getServletContext().setAttribute("servicioMensajeria", servicioMensajeria);
-            System.out.println("✓ ServicioMensajeria inicializado correctamente");
 
             ServicioNotificaciones servicioNotificaciones = new ServicioNotificaciones(servicioUsuarios);
             sce.getServletContext().setAttribute("servicioNotificaciones", servicioNotificaciones);
@@ -54,7 +63,13 @@ public class InicializadorAplicacion implements ServletContextListener {
             System.err.println("❌ ERROR CRÍTICO AL INICIALIZAR LA APLICACIÓN:");
             e.printStackTrace();
 
-            // En un entorno de producción, podrías decidir no iniciar la app si falla
+            // Mostrar información de ayuda para debugging
+            System.err.println("\n📋 INFORMACIÓN DE DEBUG:");
+            System.err.println("- Verifica que tu base de datos en Supabase esté activa");
+            System.err.println("- Verifica que las credenciales en ConexionBD sean correctas");
+            System.err.println("- Verifica que las tablas 'usuarios' y 'recursos' existan");
+            System.err.println("- Verifica que el driver PostgreSQL esté en el classpath");
+
             throw new RuntimeException("No se pudo inicializar la aplicación", e);
         }
     }
@@ -64,14 +79,15 @@ public class InicializadorAplicacion implements ServletContextListener {
         System.out.println("=== CERRANDO APLICACIÓN RED SOCIAL ACADÉMICA ===");
 
         try {
-            // Limpiar recursos si es necesario
-            // Por ejemplo, cerrar conexiones de base de datos, threads, etc.
+            // Cerrar conexión a la base de datos
+            ConexionBD.cerrarConexion();
+            System.out.println("✓ Conexión a base de datos cerrada");
 
             // Remover servicios del contexto
             sce.getServletContext().removeAttribute("servicioUsuarios");
             sce.getServletContext().removeAttribute("servicioRecursos");
+            sce.getServletContext().removeAttribute("servicioMensajeria");
             // sce.getServletContext().removeAttribute("servicioGrupos");
-            // sce.getServletContext().removeAttribute("servicioMensajeria");
             // sce.getServletContext().removeAttribute("servicioNotificaciones");
 
             System.out.println("✓ Recursos liberados correctamente");

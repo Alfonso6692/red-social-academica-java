@@ -3,227 +3,347 @@ package com.utp.redsocial.persistencia;
 import com.utp.redsocial.conexion.ConexionBD;
 import com.utp.redsocial.entidades.Usuario;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * DAO para la entidad Usuario.
- * Contiene todos los métodos para las operaciones CRUD (Crear, Leer, Actualizar, Eliminar)
- * de los usuarios en la base de datos.
+ * DAO para la entidad Usuario que usa ConexionBD para conectarse a Supabase
  */
 public class UsuarioDAO {
 
+    // Consultas SQL
+    private static final String INSERT_USUARIO =
+            "INSERT INTO usuarios (id, nombre, apellido, correo, contrasena, carrera, ciclo) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    private static final String SELECT_BY_ID =
+            "SELECT id, nombre, apellido, correo, contrasena, carrera, ciclo FROM usuarios WHERE id = ?";
+
+    private static final String SELECT_BY_CORREO =
+            "SELECT id, nombre, apellido, correo, contrasena, carrera, ciclo FROM usuarios WHERE correo = ?";
+
+    private static final String UPDATE_USUARIO =
+            "UPDATE usuarios SET nombre = ?, apellido = ?, correo = ?, contrasena = ?, carrera = ?, ciclo = ? WHERE id = ?";
+
+    private static final String DELETE_USUARIO =
+            "DELETE FROM usuarios WHERE id = ?";
+
+    private static final String SELECT_ALL =
+            "SELECT id, nombre, apellido, correo, contrasena, carrera, ciclo FROM usuarios ORDER BY nombre, apellido";
+
+    public UsuarioDAO() {
+        System.out.println("UsuarioDAO: Inicializado para usar ConexionBD");
+    }
+
     /**
-     * Guarda un nuevo usuario en la base de datos.
-     * @param usuario El objeto Usuario a guardar.
+     * Guarda un nuevo usuario en la base de datos
      */
     public void guardar(Usuario usuario) {
-        String sql = "INSERT INTO usuarios (id, nombre, apellido, correo, contrasena, carrera, ciclo) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        Connection conn = null;
+        PreparedStatement stmt = null;
 
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                throw new SQLException("No se pudo obtener conexión a la base de datos");
+            }
 
-            pstmt.setString(1, usuario.getId());
-            pstmt.setString(2, usuario.getNombre());
-            pstmt.setString(3, usuario.getApellido());
-            pstmt.setString(4, usuario.getCorreo());
-            pstmt.setString(5, usuario.getContrasena()); // Nota: En un proyecto real, la contraseña debe ser hasheada.
-            pstmt.setString(6, usuario.getCarrera());
-            pstmt.setInt(7, usuario.getCiclo());
+            stmt = conn.prepareStatement(INSERT_USUARIO);
+            stmt.setString(1, usuario.getId());
+            stmt.setString(2, usuario.getNombre());
+            stmt.setString(3, usuario.getApellido());
+            stmt.setString(4, usuario.getCorreo());
+            stmt.setString(5, usuario.getContrasena());
+            stmt.setString(6, usuario.getCarrera());
+            stmt.setString(7, usuario.getCiclo());
 
-            pstmt.executeUpdate();
-            System.out.println("Usuario guardado con éxito.");
+            int filasAfectadas = stmt.executeUpdate();
 
-        } catch (SQLException e) {
-            System.err.println("Error al guardar el usuario: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Busca un usuario en la base de datos por su correo electrónico.
-     * @param correo El correo electrónico del usuario a buscar.
-     * @return Un objeto Usuario si se encuentra, de lo contrario null.
-     */
-    public Usuario buscarPorCorreo(String correo) {
-        String sql = "SELECT * FROM usuarios WHERE correo = ?";
-        Usuario usuario = null;
-
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setString(1, correo);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                usuario = new Usuario(
-                        rs.getString("id"),
-                        rs.getString("nombre"),
-                        rs.getString("apellido"),
-                        rs.getString("correo"),
-                        rs.getString("contrasena"),
-                        rs.getString("carrera"),
-                        rs.getInt("ciclo")
-                );
+            if (filasAfectadas > 0) {
+                System.out.println("UsuarioDAO: Usuario guardado exitosamente - " + usuario.getCorreo());
+            } else {
+                throw new SQLException("No se pudo guardar el usuario");
             }
 
         } catch (SQLException e) {
-            System.err.println("Error al buscar usuario por correo: " + e.getMessage());
+            System.err.println("Error al guardar usuario: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error al guardar usuario en la base de datos", e);
+        } finally {
+            // Cerrar statement (la conexión la mantiene ConexionBD)
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException e) {
+                    System.err.println("Error al cerrar statement: " + e.getMessage());
+                }
+            }
         }
-        return usuario;
     }
 
     /**
-     * Busca un usuario en la base de datos por su ID.
-     * @param id El ID único del usuario.
-     * @return Un objeto Usuario si se encuentra, de lo contrario null.
+     * Busca un usuario por su ID
      */
     public Usuario buscarPorId(String id) {
-        String sql = "SELECT * FROM usuarios WHERE id = ?";
-        Usuario usuario = null;
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
 
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                System.err.println("No se pudo obtener conexión para buscar usuario por ID");
+                return null;
+            }
 
-            pstmt.setString(1, id);
-            ResultSet rs = pstmt.executeQuery();
+            stmt = conn.prepareStatement(SELECT_BY_ID);
+            stmt.setString(1, id);
+            rs = stmt.executeQuery();
 
             if (rs.next()) {
-                usuario = new Usuario(
-                        rs.getString("id"),
-                        rs.getString("nombre"),
-                        rs.getString("apellido"),
-                        rs.getString("correo"),
-                        rs.getString("contrasena"),
-                        rs.getString("carrera"),
-                        rs.getInt("ciclo")
-                );
+                return mapResultSetToUsuario(rs);
             }
+
+            return null;
 
         } catch (SQLException e) {
             System.err.println("Error al buscar usuario por ID: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        } finally {
+            cerrarRecursos(rs, stmt);
         }
+    }
+
+    /**
+     * Busca un usuario por su correo electrónico
+     */
+    public Usuario buscarPorCorreo(String correo) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                System.err.println("No se pudo obtener conexión para buscar usuario por correo");
+                return null;
+            }
+
+            stmt = conn.prepareStatement(SELECT_BY_CORREO);
+            stmt.setString(1, correo.toLowerCase());
+            rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                Usuario usuario = mapResultSetToUsuario(rs);
+                System.out.println("UsuarioDAO: Usuario encontrado - " + usuario.getNombreCompleto());
+                return usuario;
+            }
+
+            System.out.println("UsuarioDAO: Usuario no encontrado para correo - " + correo);
+            return null;
+
+        } catch (SQLException e) {
+            System.err.println("Error al buscar usuario por correo: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        } finally {
+            cerrarRecursos(rs, stmt);
+        }
+    }
+
+    /**
+     * Actualiza un usuario existente
+     */
+    public boolean actualizar(Usuario usuario) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                System.err.println("No se pudo obtener conexión para actualizar usuario");
+                return false;
+            }
+
+            stmt = conn.prepareStatement(UPDATE_USUARIO);
+            stmt.setString(1, usuario.getNombre());
+            stmt.setString(2, usuario.getApellido());
+            stmt.setString(3, usuario.getCorreo());
+            stmt.setString(4, usuario.getContrasena());
+            stmt.setString(5, usuario.getCarrera());
+            stmt.setString(6, usuario.getCiclo());
+            stmt.setString(7, usuario.getId());
+
+            int filasAfectadas = stmt.executeUpdate();
+
+            if (filasAfectadas > 0) {
+                System.out.println("UsuarioDAO: Usuario actualizado - " + usuario.getCorreo());
+                return true;
+            }
+
+            return false;
+
+        } catch (SQLException e) {
+            System.err.println("Error al actualizar usuario: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        } finally {
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException e) {
+                    System.err.println("Error al cerrar statement: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Elimina un usuario de la base de datos
+     */
+    public boolean eliminar(String id) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                System.err.println("No se pudo obtener conexión para eliminar usuario");
+                return false;
+            }
+
+            stmt = conn.prepareStatement(DELETE_USUARIO);
+            stmt.setString(1, id);
+
+            int filasAfectadas = stmt.executeUpdate();
+
+            if (filasAfectadas > 0) {
+                System.out.println("UsuarioDAO: Usuario eliminado - ID: " + id);
+                return true;
+            }
+
+            return false;
+
+        } catch (SQLException e) {
+            System.err.println("Error al eliminar usuario: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        } finally {
+            if (stmt != null) {
+                try {
+                    stmt.close();
+                } catch (SQLException e) {
+                    System.err.println("Error al cerrar statement: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Obtiene todos los usuarios
+     */
+    public List<Usuario> listarTodos() {
+        List<Usuario> usuarios = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                System.err.println("No se pudo obtener conexión para listar usuarios");
+                return usuarios;
+            }
+
+            stmt = conn.prepareStatement(SELECT_ALL);
+            rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                usuarios.add(mapResultSetToUsuario(rs));
+            }
+
+            System.out.println("UsuarioDAO: Se encontraron " + usuarios.size() + " usuarios");
+
+        } catch (SQLException e) {
+            System.err.println("Error al listar usuarios: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            cerrarRecursos(rs, stmt);
+        }
+
+        return usuarios;
+    }
+
+    /**
+     * Mapea un ResultSet a un objeto Usuario
+     */
+    private Usuario mapResultSetToUsuario(ResultSet rs) throws SQLException {
+        Usuario usuario = new Usuario();
+        usuario.setId(rs.getString("id"));
+        usuario.setNombre(rs.getString("nombre"));
+        usuario.setApellido(rs.getString("apellido"));
+        usuario.setCorreo(rs.getString("correo"));
+        usuario.setContrasena(rs.getString("contrasena"));
+        usuario.setCarrera(rs.getString("carrera"));
+        usuario.setCiclo(rs.getString("ciclo"));
         return usuario;
     }
 
     /**
-     * Busca usuarios cuyo nombre o apellido coincidan con el término de búsqueda.
-     * La búsqueda no es sensible a mayúsculas/minúsculas en PostgreSQL (ILIKE).
-     * @param query El nombre o apellido a buscar.
-     * @return Una lista de objetos Usuario que coinciden con la búsqueda.
+     * Verifica si existe un usuario con el correo dado
      */
-    public List<Usuario> buscarPorNombre(String query) {
-        String sql = "SELECT * FROM usuarios WHERE nombre ILIKE ? OR apellido ILIKE ?";
-        List<Usuario> usuariosEncontrados = new ArrayList<>();
+    public boolean existeCorreo(String correo) {
+        return buscarPorCorreo(correo) != null;
+    }
 
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+    /**
+     * Cuenta el total de usuarios registrados
+     */
+    public int contarUsuarios() {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
 
-            // Se añaden los '%' para buscar cualquier coincidencia, no solo exactas.
-            // Por ejemplo, buscar "alf" encontrará a "Alfonso".
-            pstmt.setString(1, "%" + query + "%");
-            pstmt.setString(2, "%" + query + "%");
+        try {
+            conn = ConexionBD.getConexion();
+            if (conn == null) {
+                return 0;
+            }
 
-            ResultSet rs = pstmt.executeQuery();
+            stmt = conn.prepareStatement("SELECT COUNT(*) FROM usuarios");
+            rs = stmt.executeQuery();
 
-            while (rs.next()) {
-                Usuario usuario = new Usuario(
-                        rs.getString("id"),
-                        rs.getString("nombre"),
-                        rs.getString("apellido"),
-                        rs.getString("correo"),
-                        rs.getString("contrasena"),
-                        rs.getString("carrera"),
-                        rs.getInt("ciclo")
-                );
-                usuariosEncontrados.add(usuario);
+            if (rs.next()) {
+                return rs.getInt(1);
             }
 
         } catch (SQLException e) {
-            System.err.println("Error al buscar usuarios por nombre: " + e.getMessage());
+            System.err.println("Error al contar usuarios: " + e.getMessage());
+        } finally {
+            cerrarRecursos(rs, stmt);
         }
-        return usuariosEncontrados;
+
+        return 0;
     }
 
     /**
-     * Actualiza los datos de un usuario existente en la base de datos.
-     *
-     * @param usuario El objeto Usuario con los datos actualizados.
-     * @return
+     * Método de utilidad para cerrar recursos
      */
-    public boolean actualizar(Usuario usuario) {
-        String sql = "UPDATE usuarios SET nombre = ?, apellido = ?, correo = ?, contrasena = ?, carrera = ?, ciclo = ? WHERE id = ?";
-
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setString(1, usuario.getNombre());
-            pstmt.setString(2, usuario.getApellido());
-            pstmt.setString(3, usuario.getCorreo());
-            pstmt.setString(4, usuario.getContrasena());
-            pstmt.setString(5, usuario.getCarrera());
-            pstmt.setInt(6, usuario.getCiclo());
-            pstmt.setString(7, usuario.getId());
-
-            pstmt.executeUpdate();
-            System.out.println("Usuario actualizado con éxito.");
-
-        } catch (SQLException e) {
-            System.err.println("Error al actualizar el usuario: " + e.getMessage());
-        }
-        return false;
-    }
-
-    /**
-     * Elimina un usuario de la base de datos por su ID.
-     * @param id El ID del usuario a eliminar.
-     */
-    public void eliminar(String id) {
-        String sql = "DELETE FROM usuarios WHERE id = ?";
-
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setString(1, id);
-            pstmt.executeUpdate();
-            System.out.println("Usuario eliminado con éxito.");
-
-        } catch (SQLException e) {
-            System.err.println("Error al eliminar el usuario: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Obtiene una lista de todos los usuarios registrados.
-     * @return Una lista de objetos Usuario.
-     */
-    public List<Usuario> listarTodos() {
-        String sql = "SELECT * FROM usuarios ORDER BY nombre, apellido";
-        List<Usuario> usuarios = new ArrayList<>();
-
-        try (Connection conn = ConexionBD.getConexion();
-             PreparedStatement pstmt = conn.prepareStatement(sql);
-             ResultSet rs = pstmt.executeQuery()) {
-
-            while (rs.next()) {
-                Usuario usuario = new Usuario(
-                        rs.getString("id"),
-                        rs.getString("nombre"),
-                        rs.getString("apellido"),
-                        rs.getString("correo"),
-                        rs.getString("contrasena"),
-                        rs.getString("carrera"),
-                        rs.getInt("ciclo")
-                );
-                usuarios.add(usuario);
+    private void cerrarRecursos(ResultSet rs, PreparedStatement stmt) {
+        if (rs != null) {
+            try {
+                rs.close();
+            } catch (SQLException e) {
+                System.err.println("Error al cerrar ResultSet: " + e.getMessage());
             }
-
-        } catch (SQLException e) {
-            System.err.println("Error al listar los usuarios: " + e.getMessage());
         }
-        return usuarios;
+        if (stmt != null) {
+            try {
+                stmt.close();
+            } catch (SQLException e) {
+                System.err.println("Error al cerrar PreparedStatement: " + e.getMessage());
+            }
+        }
     }
 }

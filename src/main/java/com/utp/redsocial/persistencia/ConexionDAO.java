@@ -119,7 +119,7 @@ public class ConexionDAO {
                         rs.getString("correo"),
                         rs.getString("contrasena"),
                         rs.getString("carrera"),
-                        rs.getInt("ciclo")
+                        rs.getString("ciclo")  // ✅ Correcto - ciclo es VARCHAR
                 );
                 amigos.add(amigo);
             }
