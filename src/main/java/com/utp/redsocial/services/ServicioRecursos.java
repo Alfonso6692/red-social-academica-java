@@ -1,117 +1,222 @@
 package com.utp.redsocial.services;
 
 import com.utp.redsocial.entidades.Recurso;
-import com.utp.redsocial.estructuras.ArrayListPersonalizado;
 import com.utp.redsocial.persistencia.RecursoDAO;
-import com.utp.redsocial.util.GeneradorID;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Capa de servicio para la lógica de negocio de los Recursos Educativos.
- * Utiliza un ArrayListPersonalizado para gestionar los recursos en memoria
- * y un HashMap como índice para búsquedas rápidas por etiquetas.
+ * Servicio para gestionar recursos educativos
  */
 public class ServicioRecursos {
 
-    private final ArrayListPersonalizado<Recurso> listaDeRecursos;
-    private final Map<String, List<Recurso>> indicePorEtiqueta; // Tabla Hash para búsqueda rápida
-    private final RecursoDAO recursoDAO;
-    private final ServicioUsuarios servicioUsuarios; // Para validar al usuario que sube el recurso
-
-    // Asegúrate de que esté así:
-    public ServicioRecursos(ServicioUsuarios servicioUsuarios) {
-        this.listaDeRecursos = new ArrayListPersonalizado<>();
-        this.indicePorEtiqueta = new HashMap<>();
-        this.recursoDAO = new RecursoDAO();  // ✅ Con 'new'
-        this.servicioUsuarios = servicioUsuarios;
-    }
+    private RecursoDAO recursoDAO;
 
     /**
-     * Sube un nuevo recurso educativo al sistema.
-     * @param titulo El título del recurso.
-     * @param descripcion La descripción del recurso.
-     * @param url La URL para acceder al recurso.
-     * @param tipo El tipo de recurso (ej. PDF, Video, Enlace).
-     * @param etiquetas Una lista de etiquetas para categorizar el recurso.
-     * @param idUsuarioSube El ID del usuario que sube el recurso.
-     * @return El nuevo recurso creado.
-     * @throws IllegalArgumentException si el usuario no existe.
+     * Constructor que recibe el DAO
      */
-    public Recurso subirRecurso(String titulo, String descripcion, String url, String tipo, List<String> etiquetas, String idUsuarioSube) throws IllegalArgumentException {
-        // 1. Validar que el usuario exista
-        if (servicioUsuarios.buscarPorId(idUsuarioSube) == null) {
-            throw new IllegalArgumentException("El usuario que intenta subir el recurso no existe.");
-        }
-
-        // 2. Crear el objeto Recurso
-        String id = GeneradorID.generar();
-        Recurso nuevoRecurso = new Recurso(id, titulo, descripcion, url, tipo, LocalDate.now(), etiquetas);
-
-        // 3. Persistir en la base de datos
-        recursoDAO.guardar(nuevoRecurso);
-
-        // 4. Añadir a la estructura en memoria
-        listaDeRecursos.agregar(nuevoRecurso);
-
-        // 5. Actualizar el índice de búsqueda por etiquetas
-        actualizarIndice(nuevoRecurso);
-
-        System.out.println("Servicio: Recurso '" + titulo + "' subido con éxito.");
-        return nuevoRecurso;
+    public ServicioRecursos(RecursoDAO recursoDAO) {
+        this.recursoDAO = recursoDAO;
     }
 
     /**
-     * Busca recursos que coincidan con una etiqueta específica.
-     * La búsqueda es muy rápida gracias al índice (Tabla Hash).
-     * @param etiqueta La etiqueta a buscar.
-     * @return Una lista de recursos que contienen esa etiqueta.
+     * Constructor por defecto
      */
-    public List<Recurso> buscarPorEtiqueta(String etiqueta) {
-        return indicePorEtiqueta.getOrDefault(etiqueta.toLowerCase(), new ArrayList<>());
+    public ServicioRecursos() {
+        this.recursoDAO = new RecursoDAO();
     }
 
     /**
-     * Obtiene todos los recursos del sistema.
-     * @return Una lista de todos los recursos.
+     * Setter para el DAO
+     */
+    public void setRecursoDAO(RecursoDAO recursoDAO) {
+        this.recursoDAO = recursoDAO;
+    }
+
+    /**
+     * Lista todos los recursos
      */
     public List<Recurso> listarTodos() {
-        // En una implementación real, se podría implementar paginación
-        return recursoDAO.listarTodos();
+        try {
+            if (recursoDAO == null) {
+                System.err.println("RecursoDAO no está inicializado");
+                return new ArrayList<>();
+            }
+
+            List<Recurso> recursos = recursoDAO.listarTodos();
+            System.out.println("ServicioRecursos: Se encontraron " + recursos.size() + " recursos");
+            return recursos != null ? recursos : new ArrayList<>();
+
+        } catch (Exception e) {
+            System.err.println("Error al listar recursos: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
     }
 
     /**
-     * Busca un recurso específico por su ID.
-     * @param id El ID del recurso.
-     * @return El objeto Recurso o null si no se encuentra.
+     * Obtiene un recurso por ID
      */
-    public Recurso buscarPorId(String id) {
-        // Primero busca en la lista en memoria (aunque no es lo más eficiente)
-        for(int i = 0; i < listaDeRecursos.tamano(); i++) {
-            if (listaDeRecursos.obtener(i).getId().equals(id)) {
-                return listaDeRecursos.obtener(i);
+    public Recurso obtenerPorId(String id) {
+        try {
+            if (recursoDAO == null || id == null || id.trim().isEmpty()) {
+                return null;
+            }
+
+            return recursoDAO.obtenerPorId(id);
+
+        } catch (Exception e) {
+            System.err.println("Error al obtener recurso por ID: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Crea un nuevo recurso
+     */
+    public boolean crearRecurso(Recurso recurso) {
+        try {
+            if (recursoDAO == null || recurso == null) {
+                return false;
+            }
+
+            // Validaciones básicas
+            if (recurso.getTitulo() == null || recurso.getTitulo().trim().isEmpty()) {
+                System.err.println("El título del recurso es requerido");
+                return false;
+            }
+
+            if (recurso.getUrl() == null || recurso.getUrl().trim().isEmpty()) {
+                System.err.println("La URL del recurso es requerida");
+                return false;
+            }
+
+            boolean resultado = recursoDAO.insertar(recurso);
+
+            if (resultado) {
+                System.out.println("Recurso creado exitosamente: " + recurso.getId());
+            }
+
+            return resultado;
+
+        } catch (Exception e) {
+            System.err.println("Error al crear recurso: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Actualiza un recurso existente
+     */
+    public boolean actualizarRecurso(Recurso recurso) {
+        try {
+            if (recursoDAO == null || recurso == null || recurso.getId() == null) {
+                return false;
+            }
+
+            // Verificar que el recurso existe
+            Recurso existente = recursoDAO.obtenerPorId(recurso.getId());
+            if (existente == null) {
+                System.err.println("No se encontró el recurso: " + recurso.getId());
+                return false;
+            }
+
+            boolean resultado = recursoDAO.actualizar(recurso);
+
+            if (resultado) {
+                System.out.println("Recurso actualizado exitosamente: " + recurso.getId());
+            }
+
+            return resultado;
+
+        } catch (Exception e) {
+            System.err.println("Error al actualizar recurso: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Elimina un recurso
+     */
+    public boolean eliminarRecurso(String id) {
+        try {
+            if (recursoDAO == null || id == null || id.trim().isEmpty()) {
+                return false;
+            }
+
+            // Verificar que el recurso existe
+            Recurso existente = recursoDAO.obtenerPorId(id);
+            if (existente == null) {
+                System.err.println("No se encontró el recurso: " + id);
+                return false;
+            }
+
+            boolean resultado = recursoDAO.eliminar(id);
+
+            if (resultado) {
+                System.out.println("Recurso eliminado exitosamente: " + id);
+            }
+
+            return resultado;
+
+        } catch (Exception e) {
+            System.err.println("Error al eliminar recurso: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Busca recursos por etiqueta
+     */
+    public List<Recurso> buscarPorEtiqueta(String etiqueta) {
+        try {
+            if (recursoDAO == null) {
+                return new ArrayList<>();
+            }
+
+            if (etiqueta == null || etiqueta.trim().isEmpty()) {
+                return listarTodos();
+            }
+
+            String etiquetaBusqueda = etiqueta.trim().toLowerCase();
+            List<Recurso> todosLosRecursos = listarTodos();
+            List<Recurso> resultados = new ArrayList<>();
+
+            for (Recurso recurso : todosLosRecursos) {
+                if (recursoContieneEtiqueta(recurso, etiquetaBusqueda)) {
+                    resultados.add(recurso);
+                }
+            }
+
+            System.out.println("Búsqueda por etiqueta '" + etiqueta + "': " + resultados.size() + " resultados");
+            return resultados;
+
+        } catch (Exception e) {
+            System.err.println("Error al buscar por etiqueta: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Verifica si un recurso contiene una etiqueta específica
+     */
+    private boolean recursoContieneEtiqueta(Recurso recurso, String etiquetaBusqueda) {
+        if (recurso.getEtiquetas() == null || recurso.getEtiquetas().isEmpty()) {
+            return false;
+        }
+
+        for (String etiqueta : recurso.getEtiquetas()) {
+            if (etiqueta != null && etiqueta.toLowerCase().contains(etiquetaBusqueda)) {
+                return true;
             }
         }
-        // Si no está en memoria, busca en la BD
-        return recursoDAO.buscarPorId(id);
-    }
 
-
-    /**
-     * Método privado para añadir un recurso al índice de búsqueda.
-     * @param recurso El recurso a indexar.
-     */
-    private void actualizarIndice(Recurso recurso) {
-        for (String etiqueta : recurso.getEtiquetas()) {
-            String etiquetaNormalizada = etiqueta.toLowerCase().trim();
-            // Si la etiqueta no existe en el mapa, crea una nueva lista
-            indicePorEtiqueta.putIfAbsent(etiquetaNormalizada, new ArrayList<>());
-            // Añade el recurso a la lista de esa etiqueta
-            indicePorEtiqueta.get(etiquetaNormalizada).add(recurso);
-        }
+        return false;
     }
 }

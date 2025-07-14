@@ -4,137 +4,28 @@ import com.utp.redsocial.conexion.ConexionBD;
 import com.utp.redsocial.entidades.Recurso;
 
 import java.sql.*;
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
- * DAO para la entidad Recurso que usa ConexionBD para conectarse a Supabase
+ * DAO para gestionar recursos en la base de datos
  */
 public class RecursoDAO {
 
-    // Consultas SQL base
-    private static final String INSERT_RECURSO =
-            "INSERT INTO recursos (id, titulo, descripcion, url, tipo, fecha_publicacion) VALUES (?, ?, ?, ?, ?, ?)";
-
-    private static final String SELECT_BY_ID =
-            "SELECT id, titulo, descripcion, url, tipo, fecha_publicacion FROM recursos WHERE id = ?";
-
-    private static final String SELECT_ALL =
-            "SELECT id, titulo, descripcion, url, tipo, fecha_publicacion FROM recursos ORDER BY fecha_publicacion DESC";
-
-    private static final String UPDATE_RECURSO =
-            "UPDATE recursos SET titulo = ?, descripcion = ?, url = ?, tipo = ?, fecha_publicacion = ? WHERE id = ?";
-
-    private static final String DELETE_RECURSO =
-            "DELETE FROM recursos WHERE id = ?";
-
-    public RecursoDAO() {
-        System.out.println("RecursoDAO: Inicializado para usar ConexionBD");
-    }
-
     /**
-     * Guarda un nuevo recurso en la base de datos
-     */
-    public void guardar(Recurso recurso) {
-        Connection conn = null;
-        PreparedStatement stmt = null;
-
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                throw new SQLException("No se pudo obtener conexión a la base de datos");
-            }
-
-            stmt = conn.prepareStatement(INSERT_RECURSO);
-            stmt.setString(1, recurso.getId());
-            stmt.setString(2, recurso.getTitulo());
-            stmt.setString(3, recurso.getDescripcion());
-            stmt.setString(4, recurso.getUrl());
-            stmt.setString(5, recurso.getTipo());
-            stmt.setDate(6, Date.valueOf(recurso.getFechaPublicacion()));
-
-            int filasAfectadas = stmt.executeUpdate();
-
-            if (filasAfectadas > 0) {
-                System.out.println("RecursoDAO: Recurso guardado exitosamente - " + recurso.getTitulo());
-            } else {
-                throw new SQLException("No se pudo guardar el recurso");
-            }
-
-        } catch (SQLException e) {
-            System.err.println("Error al guardar recurso: " + e.getMessage());
-            e.printStackTrace();
-            throw new RuntimeException("Error al guardar recurso en la base de datos", e);
-        } finally {
-            if (stmt != null) {
-                try {
-                    stmt.close();
-                } catch (SQLException e) {
-                    System.err.println("Error al cerrar statement: " + e.getMessage());
-                }
-            }
-        }
-    }
-
-    /**
-     * Busca un recurso por su ID
-     */
-    public Recurso buscarPorId(String id) {
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                System.err.println("No se pudo obtener conexión para buscar recurso por ID");
-                return null;
-            }
-
-            stmt = conn.prepareStatement(SELECT_BY_ID);
-            stmt.setString(1, id);
-            rs = stmt.executeQuery();
-
-            if (rs.next()) {
-                Recurso recurso = mapResultSetToRecurso(rs);
-                // TODO: Cargar etiquetas si tienes tabla separada
-                return recurso;
-            }
-
-            return null;
-
-        } catch (SQLException e) {
-            System.err.println("Error al buscar recurso por ID: " + e.getMessage());
-            e.printStackTrace();
-            return null;
-        } finally {
-            cerrarRecursos(rs, stmt);
-        }
-    }
-
-    /**
-     * Obtiene todos los recursos
+     * Lista todos los recursos de la base de datos
      */
     public List<Recurso> listarTodos() {
         List<Recurso> recursos = new ArrayList<>();
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
+        String sql = "SELECT id, titulo, descripcion, url, tipo, usuario_id, etiquetas, fecha_publicacion FROM recursos ORDER BY fecha_publicacion DESC";
 
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                System.err.println("No se pudo obtener conexión para listar recursos");
-                return recursos;
-            }
-
-            stmt = conn.prepareStatement(SELECT_ALL);
-            rs = stmt.executeQuery();
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
-                Recurso recurso = mapResultSetToRecurso(rs);
-                // TODO: Cargar etiquetas si tienes tabla separada
+                Recurso recurso = mapearResultSetARecurso(rs);
                 recursos.add(recurso);
             }
 
@@ -143,246 +34,200 @@ public class RecursoDAO {
         } catch (SQLException e) {
             System.err.println("Error al listar recursos: " + e.getMessage());
             e.printStackTrace();
-        } finally {
-            cerrarRecursos(rs, stmt);
         }
 
         return recursos;
+    }
+
+    /**
+     * Obtiene un recurso por su ID
+     */
+    public Recurso obtenerPorId(String id) {
+        String sql = "SELECT id, titulo, descripcion, url, tipo, usuario_id, etiquetas, fecha_publicacion FROM recursos WHERE id = ?";
+
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, id);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return mapearResultSetARecurso(rs);
+                }
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Error al obtener recurso por ID: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
+    /**
+     * Inserta un nuevo recurso en la base de datos
+     */
+    public boolean insertar(Recurso recurso) {
+        String sql = "INSERT INTO recursos (id, titulo, descripcion, url, tipo, usuario_id, etiquetas, fecha_publicacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, recurso.getId());
+            stmt.setString(2, recurso.getTitulo());
+            stmt.setString(3, recurso.getDescripcion());
+            stmt.setString(4, recurso.getUrl());
+            stmt.setString(5, recurso.getTipo());
+            stmt.setString(6, recurso.getUsuarioId());
+
+            // Convertir lista de etiquetas a texto separado por comas
+            String etiquetasTexto = "";
+            if (recurso.getEtiquetas() != null && !recurso.getEtiquetas().isEmpty()) {
+                etiquetasTexto = String.join(",", recurso.getEtiquetas());
+            }
+            stmt.setString(7, etiquetasTexto);
+
+            // Usar fecha actual
+            stmt.setTimestamp(8, new Timestamp(System.currentTimeMillis()));
+
+            int filasAfectadas = stmt.executeUpdate();
+
+            if (filasAfectadas > 0) {
+                System.out.println("Recurso insertado exitosamente: " + recurso.getId());
+                return true;
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Error al insertar recurso: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return false;
     }
 
     /**
      * Actualiza un recurso existente
      */
     public boolean actualizar(Recurso recurso) {
-        Connection conn = null;
-        PreparedStatement stmt = null;
+        String sql = "UPDATE recursos SET titulo = ?, descripcion = ?, url = ?, tipo = ?, etiquetas = ? WHERE id = ?";
 
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                System.err.println("No se pudo obtener conexión para actualizar recurso");
-                return false;
-            }
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt = conn.prepareStatement(UPDATE_RECURSO);
             stmt.setString(1, recurso.getTitulo());
             stmt.setString(2, recurso.getDescripcion());
             stmt.setString(3, recurso.getUrl());
             stmt.setString(4, recurso.getTipo());
-            stmt.setDate(5, Date.valueOf(recurso.getFechaPublicacion()));
+
+            // Convertir lista de etiquetas a texto
+            String etiquetasTexto = "";
+            if (recurso.getEtiquetas() != null && !recurso.getEtiquetas().isEmpty()) {
+                etiquetasTexto = String.join(",", recurso.getEtiquetas());
+            }
+            stmt.setString(5, etiquetasTexto);
+
             stmt.setString(6, recurso.getId());
 
             int filasAfectadas = stmt.executeUpdate();
 
             if (filasAfectadas > 0) {
-                System.out.println("RecursoDAO: Recurso actualizado - " + recurso.getTitulo());
+                System.out.println("Recurso actualizado exitosamente: " + recurso.getId());
                 return true;
             }
-
-            return false;
 
         } catch (SQLException e) {
             System.err.println("Error al actualizar recurso: " + e.getMessage());
             e.printStackTrace();
-            return false;
-        } finally {
-            if (stmt != null) {
-                try {
-                    stmt.close();
-                } catch (SQLException e) {
-                    System.err.println("Error al cerrar statement: " + e.getMessage());
-                }
-            }
         }
+
+        return false;
     }
 
     /**
-     * Elimina un recurso de la base de datos
+     * Elimina un recurso por su ID
      */
     public boolean eliminar(String id) {
-        Connection conn = null;
-        PreparedStatement stmt = null;
+        String sql = "DELETE FROM recursos WHERE id = ?";
 
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                System.err.println("No se pudo obtener conexión para eliminar recurso");
-                return false;
-            }
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt = conn.prepareStatement(DELETE_RECURSO);
             stmt.setString(1, id);
 
             int filasAfectadas = stmt.executeUpdate();
 
             if (filasAfectadas > 0) {
-                System.out.println("RecursoDAO: Recurso eliminado - ID: " + id);
+                System.out.println("Recurso eliminado exitosamente: " + id);
                 return true;
             }
-
-            return false;
 
         } catch (SQLException e) {
             System.err.println("Error al eliminar recurso: " + e.getMessage());
             e.printStackTrace();
-            return false;
-        } finally {
-            if (stmt != null) {
-                try {
-                    stmt.close();
-                } catch (SQLException e) {
-                    System.err.println("Error al cerrar statement: " + e.getMessage());
-                }
-            }
-        }
-    }
-
-    /**
-     * Busca recursos por etiqueta (implementación temporal)
-     * NOTA: Esto es temporal hasta que implementes el manejo de etiquetas adecuado
-     */
-    public List<Recurso> buscarPorEtiqueta(String etiqueta) {
-        // Implementación temporal: buscar en título o descripción
-        List<Recurso> recursosEncontrados = new ArrayList<>();
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                return recursosEncontrados;
-            }
-
-            String sql = "SELECT id, titulo, descripcion, url, tipo, fecha_publicacion " +
-                    "FROM recursos " +
-                    "WHERE LOWER(titulo) LIKE LOWER(?) OR LOWER(descripcion) LIKE LOWER(?) " +
-                    "ORDER BY fecha_publicacion DESC";
-
-            stmt = conn.prepareStatement(sql);
-            String patron = "%" + etiqueta + "%";
-            stmt.setString(1, patron);
-            stmt.setString(2, patron);
-
-            rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                recursosEncontrados.add(mapResultSetToRecurso(rs));
-            }
-
-            System.out.println("RecursoDAO: Búsqueda por '" + etiqueta + "' encontró " + recursosEncontrados.size() + " recursos");
-
-        } catch (SQLException e) {
-            System.err.println("Error al buscar recursos por etiqueta: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            cerrarRecursos(rs, stmt);
         }
 
-        return recursosEncontrados;
+        return false;
     }
 
     /**
      * Mapea un ResultSet a un objeto Recurso
      */
-    private Recurso mapResultSetToRecurso(ResultSet rs) throws SQLException {
+    private Recurso mapearResultSetARecurso(ResultSet rs) throws SQLException {
         Recurso recurso = new Recurso();
+
         recurso.setId(rs.getString("id"));
         recurso.setTitulo(rs.getString("titulo"));
         recurso.setDescripcion(rs.getString("descripcion"));
         recurso.setUrl(rs.getString("url"));
         recurso.setTipo(rs.getString("tipo"));
+        recurso.setUsuarioId(rs.getString("usuario_id"));
 
-        Date fecha = rs.getDate("fecha_publicacion");
-        if (fecha != null) {
-            recurso.setFechaPublicacion(fecha.toLocalDate());
+        // Convertir texto de etiquetas a lista
+        String etiquetasTexto = rs.getString("etiquetas");
+        if (etiquetasTexto != null && !etiquetasTexto.trim().isEmpty()) {
+            List<String> etiquetas = new ArrayList<>();
+            String[] etiquetasArray = etiquetasTexto.split(",");
+            for (String etiqueta : etiquetasArray) {
+                String etiquetaLimpia = etiqueta.trim();
+                if (!etiquetaLimpia.isEmpty()) {
+                    etiquetas.add(etiquetaLimpia);
+                }
+            }
+            recurso.setEtiquetas(etiquetas);
+        }
+
+        // Usar fecha_publicacion como fecha_creacion
+        Timestamp fechaPublicacion = rs.getTimestamp("fecha_publicacion");
+        if (fechaPublicacion != null) {
+            recurso.setFechaCreacion(fechaPublicacion);
+            recurso.setFechaActualizacion(fechaPublicacion);
         }
 
         return recurso;
     }
 
     /**
-     * Cuenta el total de recursos
+     * Verifica si existe un recurso con el ID dado
      */
-    public int contarRecursos() {
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
+    public boolean existe(String id) {
+        String sql = "SELECT COUNT(*) FROM recursos WHERE id = ?";
 
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                return 0;
-            }
+        try (Connection conn = ConexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt = conn.prepareStatement("SELECT COUNT(*) FROM recursos");
-            rs = stmt.executeQuery();
+            stmt.setString(1, id);
 
-            if (rs.next()) {
-                return rs.getInt(1);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
             }
 
         } catch (SQLException e) {
-            System.err.println("Error al contar recursos: " + e.getMessage());
-        } finally {
-            cerrarRecursos(rs, stmt);
+            System.err.println("Error al verificar existencia de recurso: " + e.getMessage());
+            e.printStackTrace();
         }
 
-        return 0;
-    }
-
-    /**
-     * Busca recursos por tipo
-     */
-    public List<Recurso> buscarPorTipo(String tipo) {
-        List<Recurso> recursos = new ArrayList<>();
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-
-        try {
-            conn = ConexionBD.getConexion();
-            if (conn == null) {
-                return recursos;
-            }
-
-            String sql = "SELECT id, titulo, descripcion, url, tipo, fecha_publicacion " +
-                    "FROM recursos WHERE tipo = ? ORDER BY fecha_publicacion DESC";
-
-            stmt = conn.prepareStatement(sql);
-            stmt.setString(1, tipo);
-            rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                recursos.add(mapResultSetToRecurso(rs));
-            }
-
-        } catch (SQLException e) {
-            System.err.println("Error al buscar recursos por tipo: " + e.getMessage());
-        } finally {
-            cerrarRecursos(rs, stmt);
-        }
-
-        return recursos;
-    }
-
-    /**
-     * Método de utilidad para cerrar recursos
-     */
-    private void cerrarRecursos(ResultSet rs, PreparedStatement stmt) {
-        if (rs != null) {
-            try {
-                rs.close();
-            } catch (SQLException e) {
-                System.err.println("Error al cerrar ResultSet: " + e.getMessage());
-            }
-        }
-        if (stmt != null) {
-            try {
-                stmt.close();
-            } catch (SQLException e) {
-                System.err.println("Error al cerrar PreparedStatement: " + e.getMessage());
-            }
-        }
+        return false;
     }
 }
